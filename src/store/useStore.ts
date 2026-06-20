@@ -15,6 +15,9 @@ import type {
   BlacklistTone,
   ReservationInput,
   SpaceStatus,
+  PermanentSeat,
+  PermanentBillingCycle,
+  PermanentSeatStatus,
 } from "@/data/types";
 import { seedData } from "@/data/seed";
 
@@ -36,6 +39,7 @@ interface State {
   accessLogs: AccessLog[];
   blacklist: BlacklistEntry[];
   blacklistReasons: BlacklistReasonConfig[];
+  permanentSeats: PermanentSeat[];
   toasts: Toast[];
 }
 
@@ -45,6 +49,7 @@ export interface CreateResult {
   reservation?: Reservation;
   blocked?: boolean;
   blacklist?: BlacklistEntry;
+  permanentSeat?: PermanentSeat;
 }
 
 const now = () => new Date().toISOString();
@@ -64,6 +69,18 @@ function planAmount(plan: Reservation["plan"], area: Area, startIso: string, end
   return area.price_times;
 }
 
+function addDays(iso: string, days: number): string {
+  const d = new Date(iso);
+  d.setDate(d.getDate() + days);
+  return d.toISOString();
+}
+
+function addMonths(iso: string, months: number): string {
+  const d = new Date(iso);
+  d.setMonth(d.getMonth() + months);
+  return d.toISOString();
+}
+
 interface Actions {
   createReservation: (input: ReservationInput, opts?: { force?: boolean }) => CreateResult;
   cancelReservation: (id: string) => void;
@@ -76,6 +93,22 @@ interface Actions {
   addBlacklistReason: (label: string, desc: string, tone: BlacklistTone) => void;
   updateBlacklistReason: (id: string, patch: Partial<Pick<BlacklistReasonConfig, "label" | "desc" | "tone">>) => void;
   removeBlacklistReason: (id: string) => void;
+  createPermanentSeat: (input: {
+    member_id: string;
+    space_id: string;
+    cycle: PermanentBillingCycle;
+    start_date: string;
+    end_date: string;
+    price: number;
+    auto_renew?: boolean;
+    method: PayMethod;
+    note?: string;
+  }) => CreateResult;
+  cancelPermanentSeat: (id: string) => void;
+  renewPermanentSeat: (id: string, method: PayMethod) => CreateResult;
+  toggleAutoRenew: (id: string) => void;
+  processPermanentBilling: () => void;
+  checkPermanentExpirations: () => void;
   resetData: () => void;
   pushToast: (t: Omit<Toast, "id">) => void;
   dismissToast: (id: string) => void;
@@ -88,7 +121,7 @@ export const useStore = create<State & Actions>()(
       toasts: [],
 
       createReservation: (input, opts) => {
-        const { spaces, areas, reservations, members, blacklist } = get();
+        const { spaces, areas, reservations, members, blacklist, permanentSeats } = get();
         const space = spaces.find((s) => s.id === input.space_id);
         if (!space) return { ok: false, error: "资源不存在" };
         if (space.status === "maintenance") return { ok: false, error: "该资源维护中，暂不可预约" };
@@ -99,6 +132,13 @@ export const useStore = create<State & Actions>()(
         if (!opts?.force) {
           const block = blacklist.find((b) => b.member_id === input.member_id);
           if (block) return { ok: false, blocked: true, blacklist: block };
+        }
+
+        const permanentSeat = permanentSeats.find(
+          (p) => p.space_id === input.space_id && p.status === "active",
+        );
+        if (permanentSeat && permanentSeat.member_id !== input.member_id) {
+          return { ok: false, error: "该座位为常驻座位，不可预约" };
         }
 
         if (new Date(input.start) >= new Date(input.end)) {
@@ -363,6 +403,266 @@ export const useStore = create<State & Actions>()(
         get().pushToast({ type: "success", title: "原因已删除", desc: reason.label });
       },
 
+      createPermanentSeat: (input) => {
+        const { spaces, areas, members, permanentSeats, blacklist } = get();
+        const space = spaces.find((s) => s.id === input.space_id);
+        if (!space) return { ok: false, error: "资源不存在" };
+        if (space.status === "maintenance") return { ok: false, error: "该资源维护中，不可设为常驻" };
+        const area = areas.find((a) => a.id === space.area_id)!;
+        const member = members.find((m) => m.id === input.member_id);
+        if (!member) return { ok: false, error: "会员不存在" };
+
+        const blocked = blacklist.find((b) => b.member_id === input.member_id);
+        if (blocked) return { ok: false, blocked: true, blacklist: blocked };
+
+        const existingActive = permanentSeats.find(
+          (p) => p.space_id === input.space_id && p.status === "active",
+        );
+        if (existingActive) return { ok: false, error: "该座位已有有效常驻合同" };
+
+        const memberActive = permanentSeats.find(
+          (p) => p.member_id === input.member_id && p.status === "active",
+        );
+        if (memberActive) return { ok: false, error: "该会员已有有效常驻座位" };
+
+        if (new Date(input.start_date) >= new Date(input.end_date)) {
+          return { ok: false, error: "结束日期需晚于开始日期" };
+        }
+
+        if (input.method === "balance" && member.balance < input.price) {
+          return { ok: false, error: "余额不足" };
+        }
+
+        const ts = now();
+        const id = uid("PS");
+        const permanentSeat: PermanentSeat = {
+          id,
+          member_id: input.member_id,
+          space_id: input.space_id,
+          cycle: input.cycle,
+          price: input.price,
+          start_date: input.start_date,
+          end_date: input.end_date,
+          status: "active",
+          auto_renew: input.auto_renew ?? false,
+          last_billed_at: ts,
+          created_at: ts,
+          note: input.note?.trim(),
+        };
+
+        const bill: Bill = {
+          id: uid("B"),
+          reservation_id: "",
+          member_id: input.member_id,
+          amount: input.price,
+          method: input.method,
+          kind: "reservation",
+          created_at: ts,
+        };
+
+        set((st) => ({
+          permanentSeats: [permanentSeat, ...st.permanentSeats],
+          bills: [bill, ...st.bills],
+          spaces: st.spaces.map((s) =>
+            s.id === input.space_id && s.status === "free" ? { ...s, status: "occupied" } : s,
+          ),
+          members: input.method === "balance"
+            ? st.members.map((m) => (m.id === input.member_id ? { ...m, balance: m.balance - input.price } : m))
+            : st.members,
+        }));
+
+        get().pushToast({
+          type: "success",
+          title: "常驻座位已开通",
+          desc: `${member.name} · ${area.name} ${space.label} · ${input.cycle === "weekly" ? "按周" : "按月"}`,
+        });
+        return { ok: true, permanentSeat };
+      },
+
+      cancelPermanentSeat: (id) => {
+        const ps = get().permanentSeats.find((p) => p.id === id);
+        if (!ps) return;
+        const member = get().members.find((m) => m.id === ps.member_id);
+        const space = get().spaces.find((s) => s.id === ps.space_id);
+        set((st) => ({
+          permanentSeats: st.permanentSeats.map((p) => (p.id === id ? { ...p, status: "cancelled" } : p)),
+          spaces: st.spaces.map((s) =>
+            s.id === ps.space_id && s.status === "occupied" ? { ...s, status: "free" } : s,
+          ),
+        }));
+        get().pushToast({
+          type: "info",
+          title: "常驻座位已取消",
+          desc: `${member?.name ?? ps.member_id} · ${space?.label ?? ps.space_id}`,
+        });
+      },
+
+      renewPermanentSeat: (id, method) => {
+        const ps = get().permanentSeats.find((p) => p.id === id);
+        if (!ps) return { ok: false, error: "常驻合同不存在" };
+        const member = get().members.find((m) => m.id === ps.member_id);
+        if (!member) return { ok: false, error: "会员不存在" };
+
+        if (method === "balance" && member.balance < ps.price) {
+          return { ok: false, error: "余额不足" };
+        }
+
+        const ts = now();
+        const newEndDate = ps.cycle === "weekly" ? addDays(ps.end_date, 7) : addMonths(ps.end_date, 1);
+
+        const bill: Bill = {
+          id: uid("B"),
+          reservation_id: "",
+          member_id: ps.member_id,
+          amount: ps.price,
+          method,
+          kind: "reservation",
+          created_at: ts,
+        };
+
+        set((st) => ({
+          permanentSeats: st.permanentSeats.map((p) =>
+            p.id === id ? { ...p, end_date: newEndDate, status: "active", last_billed_at: ts } : p,
+          ),
+          bills: [bill, ...st.bills],
+          members: method === "balance"
+            ? st.members.map((m) => (m.id === ps.member_id ? { ...m, balance: m.balance - ps.price } : m))
+            : st.members,
+        }));
+
+        get().pushToast({
+          type: "success",
+          title: "续期成功",
+          desc: `已续期至 ${new Date(newEndDate).toLocaleDateString("zh-CN")}`,
+        });
+        return { ok: true };
+      },
+
+      toggleAutoRenew: (id) => {
+        const ps = get().permanentSeats.find((p) => p.id === id);
+        if (!ps) return;
+        set((st) => ({
+          permanentSeats: st.permanentSeats.map((p) =>
+            p.id === id ? { ...p, auto_renew: !p.auto_renew } : p,
+          ),
+        }));
+        get().pushToast({
+          type: "info",
+          title: ps.auto_renew ? "已关闭自动续费" : "已开启自动续费",
+        });
+      },
+
+      processPermanentBilling: () => {
+        const { permanentSeats, members } = get();
+        const nowTime = new Date().getTime();
+        let billedCount = 0;
+
+        const updatedSeats = permanentSeats.map((ps) => {
+          if (ps.status !== "active" || !ps.auto_renew) return ps;
+
+          const cycleMs = ps.cycle === "weekly" ? 7 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000;
+          const lastBilled = new Date(ps.last_billed_at).getTime();
+
+          if (nowTime - lastBilled >= cycleMs) {
+            const member = members.find((m) => m.id === ps.member_id);
+            if (member && member.balance >= ps.price) {
+              billedCount++;
+              const newEndDate = ps.cycle === "weekly"
+                ? addDays(ps.end_date, 7)
+                : addMonths(ps.end_date, 1);
+              return { ...ps, end_date: newEndDate, last_billed_at: new Date(nowTime).toISOString() };
+            }
+          }
+          return ps;
+        });
+
+        if (billedCount > 0) {
+          const newBills: Bill[] = updatedSeats
+            .filter((ps, i) => ps.last_billed_at !== permanentSeats[i].last_billed_at)
+            .map((ps) => ({
+              id: uid("B"),
+              reservation_id: "",
+              member_id: ps.member_id,
+              amount: ps.price,
+              method: "balance" as PayMethod,
+              kind: "reservation" as const,
+              created_at: now(),
+            }));
+
+          const updatedMembers = members.map((m) => {
+            const seat = updatedSeats.find(
+              (ps, i) => ps.member_id === m.id && ps.last_billed_at !== permanentSeats[i].last_billed_at,
+            );
+            if (seat) {
+              return { ...m, balance: m.balance - seat.price };
+            }
+            return m;
+          });
+
+          set((st) => ({
+            permanentSeats: updatedSeats,
+            bills: [...newBills, ...st.bills],
+            members: updatedMembers,
+          }));
+
+          get().pushToast({
+            type: "info",
+            title: "自动扣费完成",
+            desc: `共 ${billedCount} 个常驻座位自动续期扣费`,
+          });
+        }
+      },
+
+      checkPermanentExpirations: () => {
+        const { permanentSeats } = get();
+        const nowTime = new Date().getTime();
+        const expiring: PermanentSeat[] = [];
+        const expired: PermanentSeat[] = [];
+
+        permanentSeats.forEach((ps) => {
+          if (ps.status !== "active") return;
+          const endTime = new Date(ps.end_date).getTime();
+          const daysLeft = Math.ceil((endTime - nowTime) / (24 * 60 * 60 * 1000));
+
+          if (daysLeft <= 0) {
+            expired.push(ps);
+          } else if (daysLeft <= 3 && !ps.auto_renew) {
+            expiring.push(ps);
+          }
+        });
+
+        if (expired.length > 0) {
+          set((st) => ({
+            permanentSeats: st.permanentSeats.map((p) =>
+              expired.find((e) => e.id === p.id) ? { ...p, status: "expired" } : p,
+            ),
+            spaces: st.spaces.map((s) => {
+              const hasActive = st.permanentSeats.some(
+                (p) => p.space_id === s.id && p.status === "active" && !expired.find((e) => e.id === p.id),
+              );
+              if (!hasActive && s.status === "occupied") {
+                const hasPermanent = st.permanentSeats.some((p) => p.space_id === s.id && p.status === "active");
+                return hasPermanent ? s : { ...s, status: "free" };
+              }
+              return s;
+            }),
+          }));
+          get().pushToast({
+            type: "error",
+            title: `${expired.length} 个常驻座位已到期`,
+            desc: "座位已自动释放，请及时处理",
+          });
+        }
+
+        if (expiring.length > 0) {
+          get().pushToast({
+            type: "info",
+            title: `${expiring.length} 个常驻座位即将到期`,
+            desc: "请提醒会员续费或开启自动续费",
+          });
+        }
+      },
+
       resetData: () => {
         set({ ...seedData, toasts: [] });
         get().pushToast({ type: "info", title: "演示数据已重置" });
@@ -389,6 +689,7 @@ export const useStore = create<State & Actions>()(
         accessLogs: s.accessLogs,
         blacklist: s.blacklist,
         blacklistReasons: s.blacklistReasons,
+        permanentSeats: s.permanentSeats,
       }),
     },
   ),

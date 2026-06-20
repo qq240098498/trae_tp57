@@ -8,6 +8,7 @@ import Attendance from "@/pages/Attendance";
 import Billing from "@/pages/Billing";
 import Access from "@/pages/Access";
 import Blacklist from "@/pages/Blacklist";
+import PermanentSeats from "@/pages/PermanentSeats";
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
           <Route path="/billing" element={<Billing />} />
           <Route path="/access" element={<Access />} />
           <Route path="/blacklist" element={<Blacklist />} />
+          <Route path="/permanent-seats" element={<PermanentSeats />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

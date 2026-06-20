@@ -1,18 +1,28 @@
 import { useState } from "react";
 import type { SpaceStatus } from "@/data/types";
-import { SPACE_STATUS_LABEL, AREA_TYPE_LABEL } from "@/data/types";
+import { SPACE_STATUS_LABEL, AREA_TYPE_LABEL, PERMANENT_CYCLE_LABEL } from "@/data/types";
 import { useStore } from "@/store/useStore";
 import { SpaceStatusBadge } from "@/components/ui/StatusBadge";
 import { cn } from "@/lib/utils";
+import { Crown } from "lucide-react";
 
 const statusOptions: SpaceStatus[] = ["free", "occupied", "reserved", "maintenance"];
 
 export function SpaceTable() {
   const spaces = useStore((s) => s.spaces);
   const areas = useStore((s) => s.areas);
+  const permanentSeats = useStore((s) => s.permanentSeats);
+  const members = useStore((s) => s.members);
   const updateSpaceStatus = useStore((s) => s.updateSpaceStatus);
   const [areaFilter, setAreaFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+
+  const getPermanentInfo = (spaceId: string) => {
+    const ps = permanentSeats.find((p) => p.space_id === spaceId && p.status === "active");
+    if (!ps) return null;
+    const member = members.find((m) => m.id === ps.member_id);
+    return { ps, member };
+  };
 
   const filtered = spaces.filter(
     (s) =>
@@ -47,18 +57,42 @@ export function SpaceTable() {
               <th className="px-5 py-2.5 font-medium">区域</th>
               <th className="px-5 py-2.5 font-medium">类型</th>
               <th className="px-5 py-2.5 font-medium">状态</th>
+              <th className="px-5 py-2.5 font-medium">常驻会员</th>
               <th className="px-5 py-2.5 text-right font-medium">操作</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((sp) => {
               const area = areas.find((a) => a.id === sp.area_id);
+              const permInfo = getPermanentInfo(sp.id);
               return (
                 <tr key={sp.id} className="border-b border-line-soft/60 transition-colors hover:bg-surface-sunken/60">
                   <td className="px-5 py-3 font-mono font-semibold text-ink">{sp.label}</td>
                   <td className="px-5 py-3 text-ink-soft">{area?.name}</td>
                   <td className="px-5 py-3 text-ink-soft">{area ? AREA_TYPE_LABEL[area.type] : "—"}</td>
-                  <td className="px-5 py-3"><SpaceStatusBadge status={sp.status} /></td>
+                  <td className="px-5 py-3">
+                    <div className="flex items-center gap-2">
+                      <SpaceStatusBadge status={sp.status} />
+                      {permInfo && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-rose-soft px-2 py-0.5 text-[10px] font-medium text-rose-ink">
+                          <Crown className="h-3 w-3" />
+                          常驻
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-5 py-3">
+                    {permInfo ? (
+                      <div>
+                        <p className="text-ink">{permInfo.member?.name ?? "—"}</p>
+                        <p className="text-[11px] text-ink-muted">
+                          {PERMANENT_CYCLE_LABEL[permInfo.ps.cycle]} · ¥{permInfo.ps.price}
+                        </p>
+                      </div>
+                    ) : (
+                      <span className="text-ink-muted">—</span>
+                    )}
+                  </td>
                   <td className="px-5 py-3">
                     <div className="flex justify-end">
                       <select

@@ -10,6 +10,10 @@ export type TokenStatus = "issued" | "revoked" | "failed";
 
 export type PayMethod = "balance" | "wechat" | "cash";
 
+export type PermanentBillingCycle = "weekly" | "monthly";
+
+export type PermanentSeatStatus = "active" | "expired" | "cancelled";
+
 export interface Area {
   id: string;
   name: string;
@@ -105,6 +109,21 @@ export interface BlacklistEntry {
   created_at: string;
 }
 
+export interface PermanentSeat {
+  id: string;
+  member_id: string;
+  space_id: string;
+  cycle: PermanentBillingCycle;
+  price: number;
+  start_date: string;
+  end_date: string;
+  status: PermanentSeatStatus;
+  auto_renew: boolean;
+  last_billed_at: string;
+  created_at: string;
+  note?: string;
+}
+
 export interface ReservationInput {
   member_id: string;
   space_id: string;
@@ -151,4 +170,15 @@ export const PAY_METHOD_LABEL: Record<PayMethod, string> = {
   balance: "余额",
   wechat: "微信",
   cash: "现金",
+};
+
+export const PERMANENT_CYCLE_LABEL: Record<PermanentBillingCycle, string> = {
+  weekly: "按周",
+  monthly: "按月",
+};
+
+export const PERMANENT_STATUS_LABEL: Record<PermanentSeatStatus, string> = {
+  active: "生效中",
+  expired: "已到期",
+  cancelled: "已取消",
 };

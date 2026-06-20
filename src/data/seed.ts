@@ -9,6 +9,7 @@ import type {
   AccessLog,
   BlacklistEntry,
   BlacklistReasonConfig,
+  PermanentSeat,
 } from "./types";
 import { todayAt, daysAgoAt } from "@/utils/format";
 
@@ -134,6 +135,51 @@ export const seedBlacklist: BlacklistEntry[] = [
   { id: "BL-1001", member_id: "M03", reason: "reason-noise", note: "多次在静音隔间区大声通话，经提醒未改善", created_at: daysAgoAt(12, 15) },
   { id: "BL-1002", member_id: "M06", reason: "reason-skip", note: "上次超时未补费即离开，账单未结清", created_at: daysAgoAt(1, 21) },
   { id: "BL-1003", member_id: "M07", reason: "reason-damage", note: "损坏隔间桌面，未照价赔偿", created_at: daysAgoAt(4, 10) },
+];
+
+export const seedPermanentSeats: PermanentSeat[] = [
+  {
+    id: "PS-001",
+    member_id: "M02",
+    space_id: "sp-A3",
+    cycle: "monthly",
+    price: 880,
+    start_date: daysAgoAt(30, 8),
+    end_date: daysAgoAt(-30, 22),
+    status: "active",
+    auto_renew: true,
+    last_billed_at: daysAgoAt(30, 9),
+    created_at: daysAgoAt(30, 8),
+    note: "长期固定座位，苏屿",
+  },
+  {
+    id: "PS-002",
+    member_id: "M05",
+    space_id: "sp-B6",
+    cycle: "weekly",
+    price: 420,
+    start_date: daysAgoAt(7, 8),
+    end_date: daysAgoAt(-7, 22),
+    status: "active",
+    auto_renew: true,
+    last_billed_at: daysAgoAt(7, 9),
+    created_at: daysAgoAt(7, 8),
+    note: "周卡固定座位，沈鹿",
+  },
+  {
+    id: "PS-003",
+    member_id: "M01",
+    space_id: "sp-A15",
+    cycle: "monthly",
+    price: 880,
+    start_date: daysAgoAt(45, 8),
+    end_date: daysAgoAt(-15, 22),
+    status: "active",
+    auto_renew: false,
+    last_billed_at: daysAgoAt(45, 9),
+    created_at: daysAgoAt(45, 8),
+    note: "月卡即将到期，林知微",
+  },
 ];
 
 interface SessionSeed {
@@ -308,4 +354,5 @@ export const seedData = {
   accessLogs: seedAccessLogs,
   blacklist: seedBlacklist,
   blacklistReasons: seedBlacklistReasons,
+  permanentSeats: seedPermanentSeats,
 };
