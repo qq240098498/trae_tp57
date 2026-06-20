@@ -41,6 +41,7 @@ export function MemberReportModal({ open, onClose, stats }: Props) {
   const rank = stats ? rankOfMember(statsList, stats.member.id) : -1;
   const last14Days = stats ? studyStatsLastNDays(stats, 14) : [];
   const maxDayMins = Math.max(1, ...last14Days.map((d) => d.minutes));
+  const BAR_HEIGHT_PX = 144;
 
   const hourlyBars = useMemo(() => {
     if (!stats) return [];
@@ -109,10 +110,11 @@ export function MemberReportModal({ open, onClose, stats }: Props) {
               </div>
               <div className="flex h-36 items-end gap-1">
                 {last14Days.map((d, i) => {
-                  const height = (d.minutes / maxDayMins) * 100;
+                  const ratio = d.minutes / maxDayMins;
+                  const pxHeight = Math.max(ratio * BAR_HEIGHT_PX, d.minutes > 0 ? 4 : 2);
                   const isToday = i === last14Days.length - 1;
                   return (
-                    <div key={i} className="group relative flex flex-1 flex-col items-center">
+                    <div key={i} className="group relative flex h-full flex-1 flex-col items-center justify-end">
                       <div
                         className={
                           "w-full rounded-t-md transition-all " +
@@ -122,7 +124,7 @@ export function MemberReportModal({ open, onClose, stats }: Props) {
                             ? "bg-gradient-to-t from-amber to-amber-ink/60"
                             : "bg-line")
                         }
-                        style={{ height: `${Math.max(height, d.minutes > 0 ? 4 : 2)}%` }}
+                        style={{ height: `${pxHeight}px` }}
                       />
                       <div className="pointer-events-none absolute -top-8 whitespace-nowrap rounded-md bg-ink px-2 py-1 text-[10px] text-surface opacity-0 transition group-hover:opacity-100">
                         {d.label} · {fmtDuration(d.minutes)}
@@ -146,10 +148,11 @@ export function MemberReportModal({ open, onClose, stats }: Props) {
               </div>
               <div className="flex h-36 items-end gap-0.5 overflow-x-auto">
                 {hourlyBars.map((b) => {
-                  const height = (b.mins / maxHourMins) * 100;
+                  const ratio = b.mins / maxHourMins;
+                  const pxHeight = Math.max(ratio * BAR_HEIGHT_PX, b.mins > 0 ? 3 : 2);
                   const isFav = b.hour === stats.favoriteHour;
                   return (
-                    <div key={b.hour} className="group relative flex min-w-5 flex-1 flex-col items-center">
+                    <div key={b.hour} className="group relative flex h-full min-w-5 flex-1 flex-col items-center justify-end">
                       <div
                         className={
                           "w-full rounded-t-sm transition-all " +
@@ -159,7 +162,7 @@ export function MemberReportModal({ open, onClose, stats }: Props) {
                             ? "bg-gradient-to-t from-indigo to-indigo-ink/60"
                             : "bg-line")
                         }
-                        style={{ height: `${Math.max(height, b.mins > 0 ? 3 : 2)}%` }}
+                        style={{ height: `${pxHeight}px` }}
                       />
                       <div className="pointer-events-none absolute -top-7 whitespace-nowrap rounded-md bg-ink px-2 py-1 text-[10px] text-surface opacity-0 transition group-hover:opacity-100">
                         {b.label}时 · {fmtDuration(b.mins)}
