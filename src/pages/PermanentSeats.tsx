@@ -31,8 +31,12 @@ export default function PermanentSeats() {
   }, [checkPermanentExpirations]);
 
   const handleProcessBilling = () => {
-    processPermanentBilling();
-    pushToast({ type: "success", title: "已执行自动扣费", desc: "请检查账单记录" });
+    const res = processPermanentBilling();
+    if (res.billed > 0) {
+      pushToast({ type: "success", title: "已执行自动扣费", desc: `共 ${res.billed} 个座位、${res.cycles} 期续费` });
+    } else {
+      pushToast({ type: "info", title: "暂无到期需扣费", desc: "所有常驻合同均在有效期内" });
+    }
   };
 
   const handleCheckExpirations = () => {

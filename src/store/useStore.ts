@@ -18,6 +18,7 @@ import type {
   PermanentSeat,
   PermanentBillingCycle,
   PermanentSeatStatus,
+  PayMethod,
 } from "@/data/types";
 import { seedData } from "@/data/seed";
 
@@ -107,7 +108,7 @@ interface Actions {
   cancelPermanentSeat: (id: string) => void;
   renewPermanentSeat: (id: string, method: PayMethod) => CreateResult;
   toggleAutoRenew: (id: string) => void;
-  processPermanentBilling: () => void;
+  processPermanentBilling: () => { billed: number; cycles: number };
   checkPermanentExpirations: () => void;
   resetData: () => void;
   pushToast: (t: Omit<Toast, "id">) => void;
@@ -555,62 +556,64 @@ export const useStore = create<State & Actions>()(
       processPermanentBilling: () => {
         const { permanentSeats, members } = get();
         const nowTime = new Date().getTime();
-        let billedCount = 0;
+        const billedSeats: { seat: PermanentSeat; cycles: number }[] = [];
 
         const updatedSeats = permanentSeats.map((ps) => {
           if (ps.status !== "active" || !ps.auto_renew) return ps;
+          if (nowTime < new Date(ps.end_date).getTime()) return ps;
 
-          const cycleMs = ps.cycle === "weekly" ? 7 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000;
-          const lastBilled = new Date(ps.last_billed_at).getTime();
+          const member = members.find((m) => m.id === ps.member_id);
+          if (!member) return ps;
 
-          if (nowTime - lastBilled >= cycleMs) {
-            const member = members.find((m) => m.id === ps.member_id);
-            if (member && member.balance >= ps.price) {
-              billedCount++;
-              const newEndDate = ps.cycle === "weekly"
-                ? addDays(ps.end_date, 7)
-                : addMonths(ps.end_date, 1);
-              return { ...ps, end_date: newEndDate, last_billed_at: new Date(nowTime).toISOString() };
-            }
+          const maxCyclesByBalance = Math.floor(member.balance / ps.price);
+          if (maxCyclesByBalance <= 0) return ps;
+
+          let cycles = 0;
+          let nextEndIso = ps.end_date;
+          while (
+            new Date(nextEndIso).getTime() <= nowTime &&
+            cycles < maxCyclesByBalance &&
+            cycles < 24
+          ) {
+            cycles++;
+            nextEndIso = ps.cycle === "weekly" ? addDays(nextEndIso, 7) : addMonths(nextEndIso, 1);
           }
-          return ps;
+          if (cycles === 0) return ps;
+
+          billedSeats.push({ seat: ps, cycles });
+          return { ...ps, end_date: nextEndIso, last_billed_at: new Date(nowTime).toISOString() };
         });
 
-        if (billedCount > 0) {
-          const newBills: Bill[] = updatedSeats
-            .filter((ps, i) => ps.last_billed_at !== permanentSeats[i].last_billed_at)
-            .map((ps) => ({
-              id: uid("B"),
-              reservation_id: "",
-              member_id: ps.member_id,
-              amount: ps.price,
-              method: "balance" as PayMethod,
-              kind: "reservation" as const,
-              created_at: now(),
-            }));
+        if (billedSeats.length === 0) return { billed: 0, cycles: 0 };
 
-          const updatedMembers = members.map((m) => {
-            const seat = updatedSeats.find(
-              (ps, i) => ps.member_id === m.id && ps.last_billed_at !== permanentSeats[i].last_billed_at,
-            );
-            if (seat) {
-              return { ...m, balance: m.balance - seat.price };
-            }
-            return m;
-          });
+        const deductByMember = new Map<string, number>();
+        const newBills: Bill[] = billedSeats.map(({ seat, cycles }) => {
+          const total = +(seat.price * cycles).toFixed(2);
+          deductByMember.set(seat.member_id, (deductByMember.get(seat.member_id) ?? 0) + total);
+          return {
+            id: uid("B"),
+            reservation_id: "",
+            member_id: seat.member_id,
+            amount: total,
+            method: "balance" as PayMethod,
+            kind: "reservation" as const,
+            created_at: now(),
+          };
+        });
 
-          set((st) => ({
-            permanentSeats: updatedSeats,
-            bills: [...newBills, ...st.bills],
-            members: updatedMembers,
-          }));
+        const updatedMembers = members.map((m) => {
+          const deduct = deductByMember.get(m.id);
+          return deduct ? { ...m, balance: +(m.balance - deduct).toFixed(2) } : m;
+        });
 
-          get().pushToast({
-            type: "info",
-            title: "自动扣费完成",
-            desc: `共 ${billedCount} 个常驻座位自动续期扣费`,
-          });
-        }
+        set((st) => ({
+          permanentSeats: updatedSeats,
+          bills: [...newBills, ...st.bills],
+          members: updatedMembers,
+        }));
+
+        const totalCycles = billedSeats.reduce((s, b) => s + b.cycles, 0);
+        return { billed: billedSeats.length, cycles: totalCycles };
       },
 
       checkPermanentExpirations: () => {
