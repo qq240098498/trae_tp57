@@ -169,3 +169,165 @@ export function revenueByKind(bills: Bill[]): { kind: BillKind; total: number }[
     total: +bills.filter((b) => b.kind === kind).reduce((s, b) => s + b.amount, 0).toFixed(2),
   }));
 }
+
+export interface MemberStudySession {
+  reservation: Reservation;
+  attendance: Attendance;
+  duration: number;
+  dateKey: string;
+  startHour: number;
+}
+
+export interface MemberStudyStats {
+  member: Member;
+  totalMinutes: number;
+  sessionCount: number;
+  activeDays: number;
+  avgDailyMinutes: number;
+  favoriteHour: number;
+  favoriteAreaId: string;
+  firstSessionAt: string;
+  lastSessionAt: string;
+  sessions: MemberStudySession[];
+  dailyBreakdown: Map<string, number>;
+  hourlyBreakdown: Map<number, number>;
+  areaBreakdown: Map<string, number>;
+}
+
+function dateKey(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function hourOf(iso: string): number {
+  return new Date(iso).getHours();
+}
+
+export function buildMemberSessions(
+  reservations: Reservation[],
+  attendance: Attendance[],
+): MemberStudySession[] {
+  const sessions: MemberStudySession[] = [];
+  for (const att of attendance) {
+    const r = reservations.find((x) => x.id === att.reservation_id);
+    if (!r) continue;
+    const endIso = att.check_out ?? new Date().toISOString();
+    const duration = durationMins(att.check_in, endIso);
+    if (duration <= 0) continue;
+    sessions.push({
+      reservation: r,
+      attendance: att,
+      duration,
+      dateKey: dateKey(att.check_in),
+      startHour: hourOf(att.check_in),
+    });
+  }
+  return sessions;
+}
+
+export function memberStudyStatsList(
+  members: Member[],
+  reservations: Reservation[],
+  attendance: Attendance[],
+  spaces: Space[],
+): MemberStudyStats[] {
+  const sessions = buildMemberSessions(reservations, attendance);
+  const byMember = new Map<string, MemberStudySession[]>();
+  for (const s of sessions) {
+    const list = byMember.get(s.reservation.member_id) ?? [];
+    list.push(s);
+    byMember.set(s.reservation.member_id, list);
+  }
+
+  const stats: MemberStudyStats[] = [];
+  for (const m of members) {
+    const ms = byMember.get(m.id) ?? [];
+    if (ms.length === 0) continue;
+
+    const totalMinutes = ms.reduce((s, x) => s + x.duration, 0);
+    const dailyBreakdown = new Map<string, number>();
+    const hourlyBreakdown = new Map<number, number>();
+    const areaBreakdown = new Map<string, number>();
+
+    for (const s of ms) {
+      dailyBreakdown.set(s.dateKey, (dailyBreakdown.get(s.dateKey) ?? 0) + s.duration);
+      hourlyBreakdown.set(s.startHour, (hourlyBreakdown.get(s.startHour) ?? 0) + s.duration);
+      const sp = spaces.find((x) => x.id === s.reservation.space_id);
+      if (sp) {
+        areaBreakdown.set(sp.area_id, (areaBreakdown.get(sp.area_id) ?? 0) + s.duration);
+      }
+    }
+
+    const activeDays = dailyBreakdown.size;
+    const avgDailyMinutes = activeDays === 0 ? 0 : Math.round(totalMinutes / activeDays);
+
+    let favoriteHour = 0;
+    let maxHourMins = -1;
+    for (const [h, mins] of hourlyBreakdown) {
+      if (mins > maxHourMins) {
+        maxHourMins = mins;
+        favoriteHour = h;
+      }
+    }
+
+    let favoriteAreaId = "";
+    let maxAreaMins = -1;
+    for (const [a, mins] of areaBreakdown) {
+      if (mins > maxAreaMins) {
+        maxAreaMins = mins;
+        favoriteAreaId = a;
+      }
+    }
+
+    const sortedByDate = [...ms].sort(
+      (a, b) => new Date(a.attendance.check_in).getTime() - new Date(b.attendance.check_in).getTime(),
+    );
+
+    stats.push({
+      member: m,
+      totalMinutes,
+      sessionCount: ms.length,
+      activeDays,
+      avgDailyMinutes,
+      favoriteHour,
+      favoriteAreaId,
+      firstSessionAt: sortedByDate[0].attendance.check_in,
+      lastSessionAt: sortedByDate[sortedByDate.length - 1].attendance.check_in,
+      sessions: sortedByDate,
+      dailyBreakdown,
+      hourlyBreakdown,
+      areaBreakdown,
+    });
+  }
+
+  return stats.sort((a, b) => b.totalMinutes - a.totalMinutes);
+}
+
+export function rankOfMember(
+  statsList: MemberStudyStats[],
+  memberId: string,
+): number {
+  const idx = statsList.findIndex((s) => s.member.id === memberId);
+  return idx === -1 ? -1 : idx + 1;
+}
+
+export function studyStatsLastNDays(
+  stats: MemberStudyStats,
+  days: number,
+): { label: string; minutes: number }[] {
+  const result: { label: string; minutes: number; dateKey: string }[] = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const week = ["日", "一", "二", "三", "四", "五", "六"];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const key = dateKey(d.toISOString());
+    result.push({
+      label: i === 0 ? "今天" : `${pad(d.getMonth() + 1)}/${pad(d.getDate())} 周${week[d.getDay()]}`,
+      minutes: stats.dailyBreakdown.get(key) ?? 0,
+      dateKey: key,
+    });
+  }
+  return result;
+}

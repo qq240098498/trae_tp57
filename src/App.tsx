@@ -5,6 +5,7 @@ import Dashboard from "@/pages/Dashboard";
 import Spaces from "@/pages/Spaces";
 import Reservations from "@/pages/Reservations";
 import Attendance from "@/pages/Attendance";
+import Learning from "@/pages/Learning";
 import Billing from "@/pages/Billing";
 import Access from "@/pages/Access";
 import Blacklist from "@/pages/Blacklist";
@@ -19,6 +20,7 @@ export default function App() {
           <Route path="/spaces" element={<Spaces />} />
           <Route path="/reservations" element={<Reservations />} />
           <Route path="/attendance" element={<Attendance />} />
+          <Route path="/learning" element={<Learning />} />
           <Route path="/billing" element={<Billing />} />
           <Route path="/access" element={<Access />} />
           <Route path="/blacklist" element={<Blacklist />} />
