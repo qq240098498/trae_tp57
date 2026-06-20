@@ -85,7 +85,17 @@ export interface AccessLog {
   result: "success" | "failed";
 }
 
-export type BlacklistReason = "noise" | "damage" | "skipped_payment";
+export type BlacklistReason = string;
+
+export type BlacklistTone = "sage" | "amber" | "indigo" | "clay" | "neutral" | "rose";
+
+export interface BlacklistReasonConfig {
+  id: string;
+  label: string;
+  desc: string;
+  tone: BlacklistTone;
+  created_at: string;
+}
 
 export interface BlacklistEntry {
   id: string;
@@ -141,10 +151,4 @@ export const PAY_METHOD_LABEL: Record<PayMethod, string> = {
   balance: "余额",
   wechat: "微信",
   cash: "现金",
-};
-
-export const BLACKLIST_REASON_LABEL: Record<BlacklistReason, string> = {
-  noise: "噪音投诉",
-  damage: "损坏设施",
-  skipped_payment: "逃单",
 };

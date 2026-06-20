@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertTriangle, Check } from "lucide-react";
+import { AlertTriangle, Check, Settings } from "lucide-react";
 import type { BlacklistReason } from "@/data/types";
 import { useStore } from "@/store/useStore";
 import { yuan } from "@/utils/format";
@@ -7,22 +7,24 @@ import { Modal } from "@/components/ui/Modal";
 import { BlacklistReasonBadge } from "@/components/ui/StatusBadge";
 import { cn } from "@/lib/utils";
 
-const reasons: { key: BlacklistReason; desc: string }[] = [
-  { key: "noise", desc: "喧哗/通话等影响他人专注" },
-  { key: "damage", desc: "损坏座椅、桌面等设施" },
-  { key: "skipped_payment", desc: "未结清账单即离开" },
-];
+const empty = { memberId: "", reason: "" as BlacklistReason, note: "" };
 
-const empty = { memberId: "", reason: "" as BlacklistReason | "", note: "" };
-
-export function AddBlacklistModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { members, blacklist, addBlacklist } = useStore();
+export function AddBlacklistModal({
+  open,
+  onClose,
+  onOpenReasons,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onOpenReasons?: () => void;
+}) {
+  const { members, blacklist, blacklistReasons, addBlacklist } = useStore();
   const [form, setForm] = useState({ ...empty });
 
   if (!open) return null;
   const blockedIds = new Set(blacklist.map((b) => b.member_id));
   const member = members.find((m) => m.id === form.memberId);
-  const valid = !!form.memberId && !!form.reason;
+  const valid = !!form.memberId && !!form.reason && blacklistReasons.some((r) => r.id === form.reason);
 
   const reset = () => setForm({ ...empty });
   const close = () => {
@@ -32,7 +34,7 @@ export function AddBlacklistModal({ open, onClose }: { open: boolean; onClose: (
 
   const confirm = () => {
     if (!form.memberId || !form.reason) return;
-    addBlacklist(form.memberId, form.reason as BlacklistReason, form.note);
+    addBlacklist(form.memberId, form.reason, form.note);
     close();
   };
 
@@ -44,6 +46,17 @@ export function AddBlacklistModal({ open, onClose }: { open: boolean; onClose: (
       subtitle="风险会员再次预约需管理员确认放行"
       footer={
         <>
+          {onOpenReasons && (
+            <button
+              onClick={() => {
+                close();
+                onOpenReasons();
+              }}
+              className="btn-ghost mr-auto !py-1.5 text-xs"
+            >
+              <Settings className="h-3.5 w-3.5" /> 管理原因
+            </button>
+          )}
           <button onClick={close} className="btn-secondary">取消</button>
           <button onClick={confirm} disabled={!valid} className="btn-primary"><Check className="h-4 w-4" /> 确认标记</button>
         </>
@@ -67,22 +80,41 @@ export function AddBlacklistModal({ open, onClose }: { open: boolean; onClose: (
         </div>
 
         <div>
-          <label className="label-eyebrow">标记原因</label>
-          <div className="mt-1.5 grid grid-cols-1 gap-2 sm:grid-cols-3">
-            {reasons.map((r) => (
+          <div className="flex items-center justify-between">
+            <label className="label-eyebrow">标记原因</label>
+            {onOpenReasons && (
               <button
-                key={r.key}
-                onClick={() => setForm({ ...form, reason: r.key })}
-                className={cn(
-                  "rounded-xl border p-3 text-left transition-all",
-                  form.reason === r.key ? "border-amber bg-amber-soft shadow-soft" : "border-line bg-surface hover:border-amber/40",
-                )}
+                onClick={() => {
+                  close();
+                  onOpenReasons();
+                }}
+                className="text-[11px] text-ink-muted hover:text-amber hover:underline"
               >
-                <BlacklistReasonBadge reason={r.key} />
-                <p className="mt-1.5 text-[11px] leading-snug text-ink-muted">{r.desc}</p>
+                新增 / 编辑原因
               </button>
-            ))}
+            )}
           </div>
+          {blacklistReasons.length === 0 ? (
+            <div className="mt-1.5 rounded-xl border border-dashed border-line p-4 text-center text-xs text-ink-muted">
+              暂无可选原因，请先新增至少一种原因
+            </div>
+          ) : (
+            <div className="mt-1.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {blacklistReasons.map((r) => (
+                <button
+                  key={r.id}
+                  onClick={() => setForm({ ...form, reason: r.id })}
+                  className={cn(
+                    "rounded-xl border p-3 text-left transition-all",
+                    form.reason === r.id ? "border-amber bg-amber-soft shadow-soft" : "border-line bg-surface hover:border-amber/40",
+                  )}
+                >
+                  <BlacklistReasonBadge reason={r.id} reasons={blacklistReasons} />
+                  <p className="mt-1.5 text-[11px] leading-snug text-ink-muted">{r.desc || "—"}</p>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div>

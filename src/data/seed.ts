@@ -8,6 +8,7 @@ import type {
   Bill,
   AccessLog,
   BlacklistEntry,
+  BlacklistReasonConfig,
 } from "./types";
 import { todayAt, daysAgoAt } from "@/utils/format";
 
@@ -122,10 +123,17 @@ export const seedMembers: Member[] = [
   { id: "M08", name: "顾时安", phone: "177****1192", balance: 1800, joined_at: daysAgoAt(3, 11) },
 ];
 
+export const seedBlacklistReasons: BlacklistReasonConfig[] = [
+  { id: "reason-noise", label: "噪音投诉", desc: "喧哗/通话等影响他人专注", tone: "amber", created_at: daysAgoAt(200, 10) },
+  { id: "reason-damage", label: "损坏设施", desc: "损坏座椅、桌面等设施", tone: "clay", created_at: daysAgoAt(200, 10) },
+  { id: "reason-skip", label: "逃单", desc: "未结清账单即离开", tone: "rose", created_at: daysAgoAt(200, 10) },
+  { id: "reason-smell", label: "气味/卫生", desc: "饮食、异味或卫生问题严重影响他人", tone: "indigo", created_at: daysAgoAt(100, 10) },
+];
+
 export const seedBlacklist: BlacklistEntry[] = [
-  { id: "BL-1001", member_id: "M03", reason: "noise", note: "多次在静音隔间区大声通话，经提醒未改善", created_at: daysAgoAt(12, 15) },
-  { id: "BL-1002", member_id: "M06", reason: "skipped_payment", note: "上次超时未补费即离开，账单未结清", created_at: daysAgoAt(1, 21) },
-  { id: "BL-1003", member_id: "M07", reason: "damage", note: "损坏隔间桌面，未照价赔偿", created_at: daysAgoAt(4, 10) },
+  { id: "BL-1001", member_id: "M03", reason: "reason-noise", note: "多次在静音隔间区大声通话，经提醒未改善", created_at: daysAgoAt(12, 15) },
+  { id: "BL-1002", member_id: "M06", reason: "reason-skip", note: "上次超时未补费即离开，账单未结清", created_at: daysAgoAt(1, 21) },
+  { id: "BL-1003", member_id: "M07", reason: "reason-damage", note: "损坏隔间桌面，未照价赔偿", created_at: daysAgoAt(4, 10) },
 ];
 
 interface SessionSeed {
@@ -299,4 +307,5 @@ export const seedData = {
   bills: seedBills,
   accessLogs: seedAccessLogs,
   blacklist: seedBlacklist,
+  blacklistReasons: seedBlacklistReasons,
 };

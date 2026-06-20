@@ -1,24 +1,30 @@
 import { useState } from "react";
-import { Plus, Search, Trash2, UserX } from "lucide-react";
+import { Plus, Search, Trash2, UserX, Settings } from "lucide-react";
 import { useStore } from "@/store/useStore";
 import { memberById } from "@/store/selectors";
 import { BlacklistReasonBadge } from "@/components/ui/StatusBadge";
 import { AddBlacklistModal } from "./AddBlacklistModal";
+import { ManageReasonsModal } from "./ManageReasonsModal";
 import { yuan, fmtDateTime, relativeTime } from "@/utils/format";
 import type { BlacklistReason } from "@/data/types";
+import type { BlacklistReasonConfig } from "@/data/types";
 
-const reasonFilters: { key: BlacklistReason | "all"; label: string }[] = [
-  { key: "all", label: "全部" },
-  { key: "noise", label: "噪音投诉" },
-  { key: "damage", label: "损坏设施" },
-  { key: "skipped_payment", label: "逃单" },
-];
+type ReasonFilter = BlacklistReason | "all";
 
 export function BlacklistList() {
-  const { blacklist, members, reservations, removeBlacklist } = useStore();
-  const [reason, setReason] = useState<BlacklistReason | "all">("all");
+  const { blacklist, blacklistReasons, members, reservations, removeBlacklist } = useStore();
+  const [reason, setReason] = useState<ReasonFilter>("all");
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
+  const [reasonsOpen, setReasonsOpen] = useState(false);
+
+  const filters: { key: ReasonFilter; label: string }[] = [
+    { key: "all", label: "全部" },
+    ...blacklistReasons
+      .slice()
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+      .map((r: BlacklistReasonConfig) => ({ key: r.id, label: r.label })),
+  ];
 
   const list = [...blacklist]
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -32,12 +38,12 @@ export function BlacklistList() {
   return (
     <div className="card overflow-hidden">
       <div className="flex flex-wrap items-center gap-2 border-b border-line-soft px-5 py-3.5">
-        <div className="flex items-center gap-1 rounded-lg border border-line bg-surface p-0.5">
-          {reasonFilters.map((s) => (
+        <div className="flex items-center gap-1 rounded-lg border border-line bg-surface p-0.5 max-w-full overflow-x-auto scrollbar-thin">
+          {filters.map((s) => (
             <button
               key={s.key}
               onClick={() => setReason(s.key)}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${reason === s.key ? "bg-amber-soft text-amber-ink" : "text-ink-soft hover:bg-surface-sunken"}`}
+              className={`shrink-0 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${reason === s.key ? "bg-amber-soft text-amber-ink" : "text-ink-soft hover:bg-surface-sunken"}`}
             >
               {s.label}
             </button>
@@ -52,6 +58,9 @@ export function BlacklistList() {
             className="input !w-56 !py-1.5 pl-9 text-xs"
           />
         </div>
+        <button onClick={() => setReasonsOpen(true)} className="btn-ghost !py-1.5 text-xs" title="原因管理">
+          <Settings className="h-3.5 w-3.5" /> 原因管理
+        </button>
         <button onClick={() => setOpen(true)} className="btn-primary !py-1.5 text-xs">
           <Plus className="h-3.5 w-3.5" /> 标记黑名单
         </button>
@@ -81,7 +90,7 @@ export function BlacklistList() {
                     <p className="font-mono text-[11px] text-ink-muted">{b.id}</p>
                     <p className="text-[11px] text-ink-muted">{m?.phone} · 余额 {yuan(m?.balance ?? 0)} · 历史 {reservedCount} 单</p>
                   </td>
-                  <td className="px-5 py-3"><BlacklistReasonBadge reason={b.reason} /></td>
+                  <td className="px-5 py-3"><BlacklistReasonBadge reason={b.reason} reasons={blacklistReasons} /></td>
                   <td className="px-5 py-3 max-w-xs">
                     <p className="text-ink-soft">{b.note || "—"}</p>
                   </td>
@@ -112,9 +121,13 @@ export function BlacklistList() {
           </tbody>
         </table>
       </div>
-      <div className="px-5 py-3 text-xs text-ink-muted">共 {list.length} 条记录</div>
+      <div className="flex items-center justify-between px-5 py-3 text-xs text-ink-muted">
+        <span>共 {list.length} 条记录</span>
+        <span>原因种类 {blacklistReasons.length} 个</span>
+      </div>
 
-      <AddBlacklistModal open={open} onClose={() => setOpen(false)} />
+      <AddBlacklistModal open={open} onClose={() => setOpen(false)} onOpenReasons={() => setReasonsOpen(true)} />
+      <ManageReasonsModal open={reasonsOpen} onClose={() => setReasonsOpen(false)} />
     </div>
   );
 }

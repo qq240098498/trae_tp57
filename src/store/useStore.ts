@@ -11,6 +11,8 @@ import type {
   AccessLog,
   BlacklistEntry,
   BlacklistReason,
+  BlacklistReasonConfig,
+  BlacklistTone,
   ReservationInput,
   SpaceStatus,
 } from "@/data/types";
@@ -33,6 +35,7 @@ interface State {
   bills: Bill[];
   accessLogs: AccessLog[];
   blacklist: BlacklistEntry[];
+  blacklistReasons: BlacklistReasonConfig[];
   toasts: Toast[];
 }
 
@@ -70,6 +73,9 @@ interface Actions {
   updateAreaPricing: (areaId: string, patch: Partial<Pick<Area, "price_hourly" | "price_day" | "price_month" | "price_times">>) => void;
   addBlacklist: (memberId: string, reason: BlacklistReason, note: string) => void;
   removeBlacklist: (id: string) => void;
+  addBlacklistReason: (label: string, desc: string, tone: BlacklistTone) => void;
+  updateBlacklistReason: (id: string, patch: Partial<Pick<BlacklistReasonConfig, "label" | "desc" | "tone">>) => void;
+  removeBlacklistReason: (id: string) => void;
   resetData: () => void;
   pushToast: (t: Omit<Toast, "id">) => void;
   dismissToast: (id: string) => void;
@@ -267,6 +273,11 @@ export const useStore = create<State & Actions>()(
           get().pushToast({ type: "error", title: "已存在黑名单记录", desc: "该会员已在黑名单中" });
           return;
         }
+        const validReason = get().blacklistReasons.some((r) => r.id === reason);
+        if (!validReason) {
+          get().pushToast({ type: "error", title: "原因不存在", desc: "请从有效原因中选择" });
+          return;
+        }
         const member = get().members.find((m) => m.id === memberId);
         const entry: BlacklistEntry = {
           id: uid("BL"),
@@ -285,6 +296,71 @@ export const useStore = create<State & Actions>()(
         const member = get().members.find((m) => m.id === entry.member_id);
         set((st) => ({ blacklist: st.blacklist.filter((b) => b.id !== id) }));
         get().pushToast({ type: "success", title: "已移出黑名单", desc: `${member?.name ?? entry.member_id} 恢复正常预约` });
+      },
+
+      addBlacklistReason: (label, desc, tone) => {
+        const trimmed = label.trim();
+        if (!trimmed) {
+          get().pushToast({ type: "error", title: "名称不能为空" });
+          return;
+        }
+        const dup = get().blacklistReasons.some((r) => r.label === trimmed);
+        if (dup) {
+          get().pushToast({ type: "error", title: "原因名称已存在", desc: "请使用不同的名称" });
+          return;
+        }
+        const reason: BlacklistReasonConfig = {
+          id: uid("reason"),
+          label: trimmed,
+          desc: desc.trim(),
+          tone,
+          created_at: now(),
+        };
+        set((st) => ({ blacklistReasons: [...st.blacklistReasons, reason] }));
+        get().pushToast({ type: "success", title: "已新增原因", desc: `${trimmed}` });
+      },
+
+      updateBlacklistReason: (id, patch) => {
+        const original = get().blacklistReasons.find((r) => r.id === id);
+        if (!original) return;
+        if (patch.label) {
+          const trimmed = patch.label.trim();
+          if (!trimmed) {
+            get().pushToast({ type: "error", title: "名称不能为空" });
+            return;
+          }
+          const dup = get().blacklistReasons.some((r) => r.id !== id && r.label === trimmed);
+          if (dup) {
+            get().pushToast({ type: "error", title: "原因名称已存在", desc: "请使用不同的名称" });
+            return;
+          }
+          patch = { ...patch, label: trimmed };
+        }
+        if (patch.desc) patch = { ...patch, desc: patch.desc.trim() };
+        set((st) => ({
+          blacklistReasons: st.blacklistReasons.map((r) => (r.id === id ? { ...r, ...patch } : r)),
+        }));
+        get().pushToast({ type: "success", title: "原因配置已更新" });
+      },
+
+      removeBlacklistReason: (id) => {
+        const reason = get().blacklistReasons.find((r) => r.id === id);
+        if (!reason) return;
+        const usedCount = get().blacklist.filter((b) => b.reason === id).length;
+        if (usedCount > 0) {
+          get().pushToast({
+            type: "error",
+            title: "原因正在使用中",
+            desc: `已有 ${usedCount} 条黑名单记录使用该原因，无法删除`,
+          });
+          return;
+        }
+        if (get().blacklistReasons.length <= 1) {
+          get().pushToast({ type: "error", title: "至少保留一个原因", desc: "请先新增其它原因后再删除" });
+          return;
+        }
+        set((st) => ({ blacklistReasons: st.blacklistReasons.filter((r) => r.id !== id) }));
+        get().pushToast({ type: "success", title: "原因已删除", desc: reason.label });
       },
 
       resetData: () => {
@@ -312,6 +388,7 @@ export const useStore = create<State & Actions>()(
         bills: s.bills,
         accessLogs: s.accessLogs,
         blacklist: s.blacklist,
+        blacklistReasons: s.blacklistReasons,
       }),
     },
   ),

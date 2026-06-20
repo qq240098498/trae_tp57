@@ -6,6 +6,8 @@ import type {
   Plan,
   AreaType,
   BlacklistReason,
+  BlacklistReasonConfig,
+  BlacklistTone,
 } from "@/data/types";
 import {
   SPACE_STATUS_LABEL,
@@ -13,8 +15,8 @@ import {
   TOKEN_STATUS_LABEL,
   PLAN_LABEL,
   AREA_TYPE_LABEL,
-  BLACKLIST_REASON_LABEL,
 } from "@/data/types";
+import { useStore } from "@/store/useStore";
 
 const spaceTone: Record<SpaceStatus, "sage" | "amber" | "indigo" | "clay"> = {
   free: "sage",
@@ -64,16 +66,21 @@ export function AreaTypeBadge({ type }: { type: AreaType }) {
   return <Badge tone="neutral">{AREA_TYPE_LABEL[type]}</Badge>;
 }
 
-const blacklistTone: Record<BlacklistReason, "rose" | "clay" | "amber"> = {
-  noise: "amber",
-  damage: "clay",
-  skipped_payment: "rose",
-};
-
-export function BlacklistReasonBadge({ reason }: { reason: BlacklistReason }) {
+export function BlacklistReasonBadge({
+  reason,
+  reasons,
+}: {
+  reason: BlacklistReason;
+  reasons?: BlacklistReasonConfig[];
+}) {
+  const storeReasons = useStore((s) => s.blacklistReasons);
+  const list = reasons ?? storeReasons;
+  const cfg = list.find((r) => r.id === reason);
+  const tone: BlacklistTone = cfg?.tone ?? "neutral";
+  const label = cfg?.label ?? `未知原因（${reason}）`;
   return (
-    <Badge tone={blacklistTone[reason]} dot>
-      {BLACKLIST_REASON_LABEL[reason]}
+    <Badge tone={tone} dot>
+      {label}
     </Badge>
   );
 }

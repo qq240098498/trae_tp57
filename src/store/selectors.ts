@@ -8,6 +8,7 @@ import type {
   Attendance,
   AccessLog,
   BlacklistEntry,
+  BlacklistReasonConfig,
 } from "@/data/types";
 import { durationMins } from "@/utils/format";
 
@@ -30,6 +31,13 @@ export function memberById(members: Member[], id: string): Member | undefined {
 
 export function blacklistOfMember(blacklist: BlacklistEntry[], memberId: string): BlacklistEntry | undefined {
   return blacklist.find((b) => b.member_id === memberId);
+}
+
+export function reasonById(
+  reasons: BlacklistReasonConfig[],
+  id: string,
+): BlacklistReasonConfig | undefined {
+  return reasons.find((r) => r.id === id);
 }
 
 export function tokenOfReservation(tokens: AccessToken[], reservationId: string): AccessToken | undefined {
