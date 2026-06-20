@@ -1,0 +1,122 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background-color: #f5f1e8;
+    background-image:
+      radial-gradient(circle at 12% 8%, rgba(180, 83, 9, 0.05), transparent 42%),
+      radial-gradient(circle at 88% 92%, rgba(63, 107, 90, 0.06), transparent 46%);
+    background-attachment: fixed;
+    color: #211d17;
+    font-family: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
+    font-weight: 400;
+    line-height: 1.55;
+    font-feature-settings: "ss01", "cv01";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: "Fraunces", ui-serif, Georgia, serif;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  ::selection {
+    background: rgba(180, 83, 9, 0.18);
+    color: #211d17;
+  }
+}
+
+@layer components {
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+
+  .card {
+    @apply rounded-xl border border-line bg-surface shadow-soft;
+  }
+
+  .card-sunken {
+    @apply rounded-xl border border-line-soft bg-surface-sunken;
+  }
+
+  .label-eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-muted;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg text-sm font-semibold
+      transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50
+      focus:outline-none focus-visible:ring-2 focus-visible:ring-amber/40;
+  }
+
+  .btn-primary {
+    @apply btn bg-amber px-4 py-2.5 text-white shadow-soft hover:-translate-y-0.5
+      hover:bg-amber-ink hover:shadow-lift active:translate-y-0;
+  }
+
+  .btn-secondary {
+    @apply btn border border-line bg-surface px-4 py-2.5 text-ink hover:border-amber/40
+      hover:bg-surface-sunken;
+  }
+
+  .btn-ghost {
+    @apply btn px-3 py-2 text-ink-soft hover:bg-surface-sunken hover:text-ink;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-line bg-surface px-3.5 py-2.5 text-sm text-ink
+      placeholder:text-ink-muted/70 transition-colors
+      focus:border-amber focus:outline-none focus:ring-2 focus:ring-amber/15;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
+  }
+
+  .divider-dot::before {
+    content: "·";
+    @apply mx-2 text-ink-muted/60;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #cbbd9f transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: #d9cdb2;
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: #c3b491;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
