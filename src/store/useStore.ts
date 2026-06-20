@@ -22,6 +22,7 @@ import type {
   SnackItem,
 } from "@/data/types";
 import { seedData } from "@/data/seed";
+import { appConfig } from "@/config/env";
 
 export interface Toast {
   id: string;
@@ -790,7 +791,7 @@ export const useStore = create<State & Actions>()(
       dismissToast: (id) => set((st) => ({ toasts: st.toasts.filter((x) => x.id !== id) })),
     }),
     {
-      name: "quiet-study-ops-v1",
+      name: appConfig.storageKey,
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({
         areas: s.areas,
