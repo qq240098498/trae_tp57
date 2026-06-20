@@ -17,8 +17,9 @@ import type {
   SpaceStatus,
   PermanentSeat,
   PermanentBillingCycle,
-  PermanentSeatStatus,
   PayMethod,
+  PrintItem,
+  SnackItem,
 } from "@/data/types";
 import { seedData } from "@/data/seed";
 
@@ -41,6 +42,8 @@ interface State {
   blacklist: BlacklistEntry[];
   blacklistReasons: BlacklistReasonConfig[];
   permanentSeats: PermanentSeat[];
+  printItems: PrintItem[];
+  snackItems: SnackItem[];
   toasts: Toast[];
 }
 
@@ -110,6 +113,8 @@ interface Actions {
   toggleAutoRenew: (id: string) => void;
   processPermanentBilling: () => { billed: number; cycles: number };
   checkPermanentExpirations: () => void;
+  addPrintCharge: (reservationId: string, printItemId: string, sheets: number) => CreateResult;
+  addSnackCharge: (reservationId: string, items: { snackItemId: string; quantity: number }[]) => CreateResult;
   resetData: () => void;
   pushToast: (t: Omit<Toast, "id">) => void;
   dismissToast: (id: string) => void;
@@ -273,6 +278,12 @@ export const useStore = create<State & Actions>()(
           });
         }
 
+        const sessionBills = get().bills.filter((b) => b.reservation_id === reservationId);
+        const printTotal = sessionBills.filter((b) => b.kind === "print").reduce((s, b) => s + b.amount, 0);
+        const snackTotal = sessionBills.filter((b) => b.kind === "snack").reduce((s, b) => s + b.amount, 0);
+        const overtimeTotal = overtimeBills.reduce((s, b) => s + b.amount, 0);
+        const totalExtra = +(printTotal + snackTotal + overtimeTotal).toFixed(2);
+
         set((st) => ({
           reservations: st.reservations.map((x) => (x.id === reservationId ? { ...x, status: "done" } : x)),
           attendance: st.attendance.map((a) =>
@@ -291,8 +302,17 @@ export const useStore = create<State & Actions>()(
             : st.accessLogs,
         }));
 
-        if (overtimeBills.length) {
-          get().pushToast({ type: "info", title: "签退成功 · 含超时补费", desc: `超时补费 ¥${overtimeBills[0].amount}` });
+        const parts: string[] = [];
+        if (printTotal > 0) parts.push(`打印 ¥${printTotal}`);
+        if (snackTotal > 0) parts.push(`商品 ¥${snackTotal}`);
+        if (overtimeTotal > 0) parts.push(`超时 ¥${overtimeTotal.toFixed(2)}`);
+
+        if (parts.length > 0) {
+          get().pushToast({
+            type: "info",
+            title: "签退成功 · 合并结算",
+            desc: `${parts.join(" · ")} · 合计 ¥${totalExtra.toFixed(2)}`,
+          });
         } else {
           get().pushToast({ type: "success", title: "签退成功", desc: "门禁权限已回收" });
         }
@@ -666,6 +686,97 @@ export const useStore = create<State & Actions>()(
         }
       },
 
+      addPrintCharge: (reservationId, printItemId, sheets) => {
+        const r = get().reservations.find((x) => x.id === reservationId);
+        if (!r) return { ok: false, error: "预约不存在" };
+        if (r.status !== "active") return { ok: false, error: "仅在场会员可挂账" };
+        const item = get().printItems.find((p) => p.id === printItemId);
+        if (!item) return { ok: false, error: "打印服务不存在" };
+        if (!item.enabled) return { ok: false, error: "该打印服务已停用" };
+        if (sheets <= 0) return { ok: false, error: "打印张数需大于 0" };
+
+        const amount = +(item.price_per_sheet * sheets).toFixed(2);
+        const member = get().members.find((m) => m.id === r.member_id);
+        if (member && member.balance < amount) {
+          return { ok: false, error: "余额不足" };
+        }
+
+        const ts = now();
+        const bill: Bill = {
+          id: uid("B"),
+          reservation_id: reservationId,
+          member_id: r.member_id,
+          amount,
+          method: "balance",
+          kind: "print",
+          created_at: ts,
+          note: `${item.name} × ${sheets}张`,
+        };
+
+        set((st) => ({
+          bills: [bill, ...st.bills],
+          members: st.members.map((m) => (m.id === r.member_id ? { ...m, balance: +(m.balance - amount).toFixed(2) } : m)),
+        }));
+        get().pushToast({
+          type: "success",
+          title: "打印挂账成功",
+          desc: `${item.name} × ${sheets}张 · ¥${amount}`,
+        });
+        return { ok: true };
+      },
+
+      addSnackCharge: (reservationId, items) => {
+        const r = get().reservations.find((x) => x.id === reservationId);
+        if (!r) return { ok: false, error: "预约不存在" };
+        if (r.status !== "active") return { ok: false, error: "仅在场会员可挂账" };
+        if (items.length === 0) return { ok: false, error: "请选择商品" };
+
+        const { snackItems } = get();
+        const resolved: { item: SnackItem; qty: number }[] = [];
+        for (const it of items) {
+          if (it.quantity <= 0) return { ok: false, error: "商品数量需大于 0" };
+          const snack = snackItems.find((s) => s.id === it.snackItemId);
+          if (!snack) return { ok: false, error: "商品不存在" };
+          if (!snack.enabled) return { ok: false, error: `${snack.name} 已下架` };
+          if (snack.stock < it.quantity) return { ok: false, error: `${snack.name} 库存不足` };
+          resolved.push({ item: snack, qty: it.quantity });
+        }
+
+        const total = +resolved.reduce((s, { item, qty }) => s + item.price * qty, 0).toFixed(2);
+        const member = get().members.find((m) => m.id === r.member_id);
+        if (member && member.balance < total) {
+          return { ok: false, error: "余额不足" };
+        }
+
+        const ts = now();
+        const note = resolved.map(({ item, qty }) => `${item.name} × ${qty}`).join("、");
+        const bill: Bill = {
+          id: uid("B"),
+          reservation_id: reservationId,
+          member_id: r.member_id,
+          amount: total,
+          method: "balance",
+          kind: "snack",
+          created_at: ts,
+          note,
+        };
+
+        set((st) => ({
+          bills: [bill, ...st.bills],
+          snackItems: st.snackItems.map((s) => {
+            const match = resolved.find((r) => r.item.id === s.id);
+            return match ? { ...s, stock: s.stock - match.qty } : s;
+          }),
+          members: st.members.map((m) => (m.id === r.member_id ? { ...m, balance: +(m.balance - total).toFixed(2) } : m)),
+        }));
+        get().pushToast({
+          type: "success",
+          title: "商品挂账成功",
+          desc: `${note} · 合计 ¥${total}`,
+        });
+        return { ok: true };
+      },
+
       resetData: () => {
         set({ ...seedData, toasts: [] });
         get().pushToast({ type: "info", title: "演示数据已重置" });
@@ -693,6 +804,8 @@ export const useStore = create<State & Actions>()(
         blacklist: s.blacklist,
         blacklistReasons: s.blacklistReasons,
         permanentSeats: s.permanentSeats,
+        printItems: s.printItems,
+        snackItems: s.snackItems,
       }),
     },
   ),

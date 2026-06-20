@@ -10,6 +10,8 @@ import type {
   BlacklistEntry,
   BlacklistReasonConfig,
   PermanentSeat,
+  PrintItem,
+  SnackItem,
 } from "./types";
 import { todayAt, daysAgoAt } from "@/utils/format";
 
@@ -343,6 +345,58 @@ for (const s of sessions) {
   }
 }
 
+export const seedPrintItems: PrintItem[] = [
+  { id: "print-bw-a4", category: "bw_a4", name: "黑白 A4", price_per_sheet: 0.5, enabled: true },
+  { id: "print-color-a4", category: "color_a4", name: "彩色 A4", price_per_sheet: 2, enabled: true },
+  { id: "print-bw-a3", category: "bw_a3", name: "黑白 A3", price_per_sheet: 1, enabled: true },
+  { id: "print-color-a3", category: "color_a3", name: "彩色 A3", price_per_sheet: 4, enabled: true },
+];
+
+export const seedSnackItems: SnackItem[] = [
+  { id: "snack-001", category: "drink", name: "农夫山泉 550ml", barcode: "6901285991219", price: 3, stock: 48, enabled: true },
+  { id: "snack-002", category: "drink", name: "可口可乐 330ml", barcode: "6901939621103", price: 4, stock: 36, enabled: true },
+  { id: "snack-003", category: "drink", name: "元气森林 白桃味", barcode: "6970815920156", price: 6, stock: 24, enabled: true },
+  { id: "snack-004", category: "drink", name: "瑞幸美式咖啡", barcode: "6975006223482", price: 15, stock: 12, enabled: true },
+  { id: "snack-005", category: "snack", name: "乐事薯片 原味", barcode: "6924743915818", price: 8, stock: 20, enabled: true },
+  { id: "snack-006", category: "snack", name: "德芙巧克力", barcode: "6923644266684", price: 12, stock: 15, enabled: true },
+  { id: "snack-007", category: "instant", name: "康师傅红烧牛肉面", barcode: "6920152485652", price: 6, stock: 30, enabled: true },
+  { id: "snack-008", category: "instant", name: "自热米饭 宫保鸡丁", barcode: "6971234567890", price: 18, stock: 10, enabled: true },
+  { id: "snack-009", category: "other", name: "便签本 A5", barcode: "6900000000001", price: 5, stock: 25, enabled: true },
+  { id: "snack-010", category: "other", name: "中性笔 黑色", barcode: "6900000000002", price: 3, stock: 40, enabled: true },
+];
+
+// 为正在在场的会员添加一些挂账记录
+seedBills.push({
+  id: "B-R-1005-PRINT",
+  reservation_id: "R-1005",
+  member_id: "M04",
+  amount: 5,
+  method: "balance",
+  kind: "print",
+  created_at: todayAt(10, 30),
+  note: "黑白A4 × 10张",
+});
+seedBills.push({
+  id: "B-R-1005-SNACK",
+  reservation_id: "R-1005",
+  member_id: "M04",
+  amount: 4,
+  method: "balance",
+  kind: "snack",
+  created_at: todayAt(11, 0),
+  note: "可口可乐 × 1",
+});
+seedBills.push({
+  id: "B-R-1006-SNACK",
+  reservation_id: "R-1006",
+  member_id: "M05",
+  amount: 21,
+  method: "balance",
+  kind: "snack",
+  created_at: todayAt(10, 0),
+  note: "元气森林 × 1、德芙巧克力 × 1、乐事薯片 × 1",
+});
+
 export const seedData = {
   areas: seedAreas,
   spaces: seedSpaces,
@@ -355,4 +409,6 @@ export const seedData = {
   blacklist: seedBlacklist,
   blacklistReasons: seedBlacklistReasons,
   permanentSeats: seedPermanentSeats,
+  printItems: seedPrintItems,
+  snackItems: seedSnackItems,
 };

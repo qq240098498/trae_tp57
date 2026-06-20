@@ -1,14 +1,29 @@
-import { useEffect, useState } from "react";
-import { LogOut, AlertTriangle } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { LogOut, AlertTriangle, Printer, ShoppingCart } from "lucide-react";
 import { useStore } from "@/store/useStore";
 import { inSessionList } from "@/store/selectors";
-import { fmtTime, fmtDuration, fmtElapsed } from "@/utils/format";
+import { fmtTime, fmtDuration, fmtElapsed, yuan } from "@/utils/format";
 import { cn } from "@/lib/utils";
+import { AddChargeModal } from "./AddChargeModal";
+import { BILL_KIND_LABEL } from "@/data/types";
 
 export function ActiveBoard() {
-  const { reservations, attendance, spaces, members, checkOut } = useStore();
+  const { reservations, attendance, spaces, members, bills, checkOut } = useStore();
   const session = inSessionList(reservations, attendance, spaces, members);
   const [, setTick] = useState(0);
+  const [chargeModal, setChargeModal] = useState<{ rid: string; name?: string; space?: string; tab: "print" | "snack" } | null>(null);
+
+  const chargeByReservation = useMemo(() => {
+    const map = new Map<string, { print: number; snack: number }>();
+    for (const b of bills) {
+      if (!b.reservation_id) continue;
+      const cur = map.get(b.reservation_id) ?? { print: 0, snack: 0 };
+      if (b.kind === "print") cur.print += b.amount;
+      else if (b.kind === "snack") cur.snack += b.amount;
+      map.set(b.reservation_id, cur);
+    }
+    return map;
+  }, [bills]);
 
   useEffect(() => {
     const t = setInterval(() => setTick((n) => n + 1), 5000);
@@ -34,6 +49,8 @@ export function ActiveBoard() {
             const overtime = elapsed > total;
             const pct = Math.min(100, (elapsed / total) * 100);
             const remaining = total - elapsed;
+            const charge = chargeByReservation.get(reservation.id);
+            const hasCharge = charge && (charge.print > 0 || charge.snack > 0);
             return (
               <div key={reservation.id} className="rounded-xl border border-line-soft bg-surface-sunken p-4">
                 <div className="flex items-start justify-between">
@@ -57,19 +74,69 @@ export function ActiveBoard() {
                     <div className={cn("h-full rounded-full transition-all", overtime ? "bg-rose-500" : "bg-amber")} style={{ width: `${pct}%` }} />
                   </div>
                 </div>
+                {hasCharge && (
+                  <div className="mt-3 flex flex-wrap gap-1.5 rounded-lg border border-line-soft bg-surface px-3 py-2">
+                    {charge!.print > 0 && (
+                      <span className="flex items-center gap-1 text-[11px] text-indigo-ink">
+                        <Printer className="h-3 w-3" /> {BILL_KIND_LABEL.print} {yuan(charge!.print)}
+                      </span>
+                    )}
+                    {charge!.snack > 0 && (
+                      <span className="flex items-center gap-1 text-[11px] text-amber-ink">
+                        <ShoppingCart className="h-3 w-3" /> {BILL_KIND_LABEL.snack} {yuan(charge!.snack)}
+                      </span>
+                    )}
+                  </div>
+                )}
                 {overtime && (
                   <p className="mt-2 flex items-center gap-1 text-[11px] text-rose-600">
                     <AlertTriangle className="h-3 w-3" /> 已超时，签退将按小时单价补费
                   </p>
                 )}
-                <button onClick={() => checkOut(reservation.id)} className="btn-secondary mt-3 w-full !py-2">
-                  <LogOut className="h-4 w-4" /> 签退
-                </button>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() =>
+                      setChargeModal({
+                        rid: reservation.id,
+                        name: member?.name,
+                        space: space?.label,
+                        tab: "print",
+                      })
+                    }
+                    className="btn-secondary !py-2 !text-xs"
+                  >
+                    <Printer className="h-3.5 w-3.5" /> 打印
+                  </button>
+                  <button
+                    onClick={() =>
+                      setChargeModal({
+                        rid: reservation.id,
+                        name: member?.name,
+                        space: space?.label,
+                        tab: "snack",
+                      })
+                    }
+                    className="btn-secondary !py-2 !text-xs"
+                  >
+                    <ShoppingCart className="h-3.5 w-3.5" /> 零食
+                  </button>
+                  <button onClick={() => checkOut(reservation.id)} className="btn-primary !py-2 !text-xs">
+                    <LogOut className="h-3.5 w-3.5" /> 签退
+                  </button>
+                </div>
               </div>
             );
           })}
         </div>
       )}
+      <AddChargeModal
+        open={chargeModal != null}
+        onClose={() => setChargeModal(null)}
+        reservationId={chargeModal?.rid ?? ""}
+        memberName={chargeModal?.name}
+        spaceLabel={chargeModal?.space}
+        initialTab={chargeModal?.tab ?? "print"}
+      />
     </div>
   );
 }

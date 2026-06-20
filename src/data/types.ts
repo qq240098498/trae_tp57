@@ -14,6 +14,12 @@ export type PermanentBillingCycle = "weekly" | "monthly";
 
 export type PermanentSeatStatus = "active" | "expired" | "cancelled";
 
+export type BillKind = "reservation" | "overtime" | "print" | "snack";
+
+export type PrintCategory = "bw_a4" | "color_a4" | "bw_a3" | "color_a3";
+
+export type SnackCategory = "drink" | "snack" | "instant" | "other";
+
 export interface Area {
   id: string;
   name: string;
@@ -76,8 +82,27 @@ export interface Bill {
   member_id: string;
   amount: number;
   method: PayMethod;
-  kind: "reservation" | "overtime";
+  kind: BillKind;
   created_at: string;
+  note?: string;
+}
+
+export interface PrintItem {
+  id: string;
+  category: PrintCategory;
+  name: string;
+  price_per_sheet: number;
+  enabled: boolean;
+}
+
+export interface SnackItem {
+  id: string;
+  category: SnackCategory;
+  name: string;
+  barcode?: string;
+  price: number;
+  stock: number;
+  enabled: boolean;
 }
 
 export interface AccessLog {
@@ -181,4 +206,25 @@ export const PERMANENT_STATUS_LABEL: Record<PermanentSeatStatus, string> = {
   active: "生效中",
   expired: "已到期",
   cancelled: "已取消",
+};
+
+export const BILL_KIND_LABEL: Record<BillKind, string> = {
+  reservation: "座位费",
+  overtime: "超时补费",
+  print: "打印费",
+  snack: "商品消费",
+};
+
+export const PRINT_CATEGORY_LABEL: Record<PrintCategory, string> = {
+  bw_a4: "黑白 A4",
+  color_a4: "彩色 A4",
+  bw_a3: "黑白 A3",
+  color_a3: "彩色 A3",
+};
+
+export const SNACK_CATEGORY_LABEL: Record<SnackCategory, string> = {
+  drink: "饮料",
+  snack: "零食",
+  instant: "速食",
+  other: "其它",
 };

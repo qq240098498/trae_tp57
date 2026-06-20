@@ -9,6 +9,7 @@ import type {
   AccessLog,
   BlacklistEntry,
   BlacklistReasonConfig,
+  BillKind,
 } from "@/data/types";
 import { durationMins } from "@/utils/format";
 
@@ -159,4 +160,12 @@ export function recentLogs(logs: AccessLog[], tokens: AccessToken[], limit = 12)
       const token = tokens.find((t) => t.id === log.token_id);
       return { log, token };
     });
+}
+
+export function revenueByKind(bills: Bill[]): { kind: BillKind; total: number }[] {
+  const kinds: BillKind[] = ["reservation", "overtime", "print", "snack"];
+  return kinds.map((kind) => ({
+    kind,
+    total: +bills.filter((b) => b.kind === kind).reduce((s, b) => s + b.amount, 0).toFixed(2),
+  }));
 }

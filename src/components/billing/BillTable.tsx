@@ -3,14 +3,28 @@ import { useStore } from "@/store/useStore";
 import { spaceArea, memberById } from "@/store/selectors";
 import { yuan, fmtDateTime } from "@/utils/format";
 import { PlanBadge } from "@/components/ui/StatusBadge";
-import { PAY_METHOD_LABEL } from "@/data/types";
-import type { Bill } from "@/data/types";
+import { BILL_KIND_LABEL, PAY_METHOD_LABEL } from "@/data/types";
+import type { BillKind } from "@/data/types";
+import { cn } from "@/lib/utils";
 
-const kindLabel: Record<Bill["kind"], string> = { reservation: "预付款", overtime: "超时补费" };
+const kindTone: Record<BillKind, string> = {
+  reservation: "bg-surface-sunken text-ink-soft",
+  overtime: "bg-rose-100 text-rose-700",
+  print: "bg-indigo-soft text-indigo",
+  snack: "bg-amber-soft text-amber-ink",
+};
 
 export function BillTable() {
   const { bills, reservations, spaces, areas, members } = useStore();
-  const [kind, setKind] = useState("all");
+  const [kind, setKind] = useState<"all" | BillKind>("all");
+
+  const filters: { key: "all" | BillKind; label: string }[] = [
+    { key: "all", label: "全部" },
+    { key: "reservation", label: BILL_KIND_LABEL.reservation },
+    { key: "overtime", label: BILL_KIND_LABEL.overtime },
+    { key: "print", label: BILL_KIND_LABEL.print },
+    { key: "snack", label: BILL_KIND_LABEL.snack },
+  ];
 
   const list = [...bills]
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -21,9 +35,16 @@ export function BillTable() {
       <div className="flex items-center gap-2 border-b border-line-soft px-5 py-3.5">
         <span className="label-eyebrow">账单流水</span>
         <div className="ml-auto flex items-center gap-1 rounded-lg border border-line bg-surface p-0.5">
-          {["all", "reservation", "overtime"].map((k) => (
-            <button key={k} onClick={() => setKind(k)} className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${kind === k ? "bg-amber-soft text-amber-ink" : "text-ink-soft hover:bg-surface-sunken"}`}>
-              {k === "all" ? "全部" : kindLabel[k as Bill["kind"]]}
+          {filters.map((f) => (
+            <button
+              key={f.key}
+              onClick={() => setKind(f.key)}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                kind === f.key ? "bg-amber-soft text-amber-ink" : "text-ink-soft hover:bg-surface-sunken",
+              )}
+            >
+              {f.label}
             </button>
           ))}
         </div>
@@ -37,6 +58,7 @@ export function BillTable() {
               <th className="px-5 py-2.5 font-medium">资源</th>
               <th className="px-5 py-2.5 font-medium">套餐</th>
               <th className="px-5 py-2.5 font-medium">类型</th>
+              <th className="px-5 py-2.5 font-medium">明细</th>
               <th className="px-5 py-2.5 font-medium">支付</th>
               <th className="px-5 py-2.5 text-right font-medium">金额</th>
             </tr>
@@ -56,7 +78,10 @@ export function BillTable() {
                   </td>
                   <td className="px-5 py-3">{r ? <PlanBadge plan={r.plan} /> : <span className="text-ink-muted">—</span>}</td>
                   <td className="px-5 py-3">
-                    <span className={`chip ${b.kind === "overtime" ? "bg-rose-100 text-rose-700" : "bg-surface-sunken text-ink-soft"}`}>{kindLabel[b.kind]}</span>
+                    <span className={cn("chip", kindTone[b.kind])}>{BILL_KIND_LABEL[b.kind]}</span>
+                  </td>
+                  <td className="px-5 py-3 max-w-[240px]">
+                    <p className="truncate text-xs text-ink-soft">{b.note ?? "—"}</p>
                   </td>
                   <td className="px-5 py-3 text-ink-soft">{PAY_METHOD_LABEL[b.method]}</td>
                   <td className="px-5 py-3 text-right font-semibold text-ink tnum">{yuan(b.amount)}</td>
@@ -64,7 +89,7 @@ export function BillTable() {
               );
             })}
             {list.length === 0 && (
-              <tr><td colSpan={7} className="px-5 py-12 text-center text-sm text-ink-muted">暂无账单</td></tr>
+              <tr><td colSpan={8} className="px-5 py-12 text-center text-sm text-ink-muted">暂无账单</td></tr>
             )}
           </tbody>
         </table>
