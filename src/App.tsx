@@ -7,6 +7,7 @@ import Reservations from "@/pages/Reservations";
 import Attendance from "@/pages/Attendance";
 import Billing from "@/pages/Billing";
 import Access from "@/pages/Access";
+import Blacklist from "@/pages/Blacklist";
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
           <Route path="/attendance" element={<Attendance />} />
           <Route path="/billing" element={<Billing />} />
           <Route path="/access" element={<Access />} />
+          <Route path="/blacklist" element={<Blacklist />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

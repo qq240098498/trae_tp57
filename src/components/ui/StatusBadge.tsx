@@ -5,6 +5,7 @@ import type {
   TokenStatus,
   Plan,
   AreaType,
+  BlacklistReason,
 } from "@/data/types";
 import {
   SPACE_STATUS_LABEL,
@@ -12,6 +13,7 @@ import {
   TOKEN_STATUS_LABEL,
   PLAN_LABEL,
   AREA_TYPE_LABEL,
+  BLACKLIST_REASON_LABEL,
 } from "@/data/types";
 
 const spaceTone: Record<SpaceStatus, "sage" | "amber" | "indigo" | "clay"> = {
@@ -60,4 +62,18 @@ export function PlanBadge({ plan }: { plan: Plan }) {
 
 export function AreaTypeBadge({ type }: { type: AreaType }) {
   return <Badge tone="neutral">{AREA_TYPE_LABEL[type]}</Badge>;
+}
+
+const blacklistTone: Record<BlacklistReason, "rose" | "clay" | "amber"> = {
+  noise: "amber",
+  damage: "clay",
+  skipped_payment: "rose",
+};
+
+export function BlacklistReasonBadge({ reason }: { reason: BlacklistReason }) {
+  return (
+    <Badge tone={blacklistTone[reason]} dot>
+      {BLACKLIST_REASON_LABEL[reason]}
+    </Badge>
+  );
 }

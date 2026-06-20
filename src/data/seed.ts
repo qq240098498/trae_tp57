@@ -7,6 +7,7 @@ import type {
   Attendance,
   Bill,
   AccessLog,
+  BlacklistEntry,
 } from "./types";
 import { todayAt, daysAgoAt } from "@/utils/format";
 
@@ -119,6 +120,12 @@ export const seedMembers: Member[] = [
   { id: "M06", name: "江听潮", phone: "136****4428", balance: 40, joined_at: daysAgoAt(18, 13) },
   { id: "M07", name: "何归禾", phone: "188****7733", balance: 90, joined_at: daysAgoAt(9, 16) },
   { id: "M08", name: "顾时安", phone: "177****1192", balance: 1800, joined_at: daysAgoAt(3, 11) },
+];
+
+export const seedBlacklist: BlacklistEntry[] = [
+  { id: "BL-1001", member_id: "M03", reason: "noise", note: "多次在静音隔间区大声通话，经提醒未改善", created_at: daysAgoAt(12, 15) },
+  { id: "BL-1002", member_id: "M06", reason: "skipped_payment", note: "上次超时未补费即离开，账单未结清", created_at: daysAgoAt(1, 21) },
+  { id: "BL-1003", member_id: "M07", reason: "damage", note: "损坏隔间桌面，未照价赔偿", created_at: daysAgoAt(4, 10) },
 ];
 
 interface SessionSeed {
@@ -291,4 +298,5 @@ export const seedData = {
   attendance: seedAttendance,
   bills: seedBills,
   accessLogs: seedAccessLogs,
+  blacklist: seedBlacklist,
 };

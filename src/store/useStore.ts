@@ -9,6 +9,8 @@ import type {
   Attendance,
   Bill,
   AccessLog,
+  BlacklistEntry,
+  BlacklistReason,
   ReservationInput,
   SpaceStatus,
 } from "@/data/types";
@@ -30,6 +32,7 @@ interface State {
   attendance: Attendance[];
   bills: Bill[];
   accessLogs: AccessLog[];
+  blacklist: BlacklistEntry[];
   toasts: Toast[];
 }
 
@@ -37,6 +40,8 @@ export interface CreateResult {
   ok: boolean;
   error?: string;
   reservation?: Reservation;
+  blocked?: boolean;
+  blacklist?: BlacklistEntry;
 }
 
 const now = () => new Date().toISOString();
@@ -57,12 +62,14 @@ function planAmount(plan: Reservation["plan"], area: Area, startIso: string, end
 }
 
 interface Actions {
-  createReservation: (input: ReservationInput) => CreateResult;
+  createReservation: (input: ReservationInput, opts?: { force?: boolean }) => CreateResult;
   cancelReservation: (id: string) => void;
   checkIn: (reservationId: string) => CreateResult;
   checkOut: (reservationId: string) => CreateResult;
   updateSpaceStatus: (id: string, status: SpaceStatus) => void;
   updateAreaPricing: (areaId: string, patch: Partial<Pick<Area, "price_hourly" | "price_day" | "price_month" | "price_times">>) => void;
+  addBlacklist: (memberId: string, reason: BlacklistReason, note: string) => void;
+  removeBlacklist: (id: string) => void;
   resetData: () => void;
   pushToast: (t: Omit<Toast, "id">) => void;
   dismissToast: (id: string) => void;
@@ -74,14 +81,19 @@ export const useStore = create<State & Actions>()(
       ...seedData,
       toasts: [],
 
-      createReservation: (input) => {
-        const { spaces, areas, reservations, members } = get();
+      createReservation: (input, opts) => {
+        const { spaces, areas, reservations, members, blacklist } = get();
         const space = spaces.find((s) => s.id === input.space_id);
         if (!space) return { ok: false, error: "资源不存在" };
         if (space.status === "maintenance") return { ok: false, error: "该资源维护中，暂不可预约" };
         const area = areas.find((a) => a.id === space.area_id)!;
         const member = members.find((m) => m.id === input.member_id);
         if (!member) return { ok: false, error: "会员不存在" };
+
+        if (!opts?.force) {
+          const block = blacklist.find((b) => b.member_id === input.member_id);
+          if (block) return { ok: false, blocked: true, blacklist: block };
+        }
 
         if (new Date(input.start) >= new Date(input.end)) {
           return { ok: false, error: "结束时间需晚于开始时间" };
@@ -150,7 +162,7 @@ export const useStore = create<State & Actions>()(
             : st.members,
         }));
 
-        get().pushToast({ type: "success", title: "预约成功", desc: `门禁权限已自动下发 · ${area.name} ${space.label}` });
+        get().pushToast({ type: "success", title: opts?.force ? "预约成功 · 管理员放行" : "预约成功", desc: `门禁权限已自动下发 · ${area.name} ${space.label}` });
         return { ok: true, reservation };
       },
 
@@ -249,6 +261,32 @@ export const useStore = create<State & Actions>()(
         get().pushToast({ type: "success", title: "定价已更新" });
       },
 
+      addBlacklist: (memberId, reason, note) => {
+        const exists = get().blacklist.some((b) => b.member_id === memberId);
+        if (exists) {
+          get().pushToast({ type: "error", title: "已存在黑名单记录", desc: "该会员已在黑名单中" });
+          return;
+        }
+        const member = get().members.find((m) => m.id === memberId);
+        const entry: BlacklistEntry = {
+          id: uid("BL"),
+          member_id: memberId,
+          reason,
+          note: note.trim(),
+          created_at: now(),
+        };
+        set((st) => ({ blacklist: [entry, ...st.blacklist] }));
+        get().pushToast({ type: "info", title: "已标记黑名单", desc: `${member?.name ?? memberId} · 再次预约需管理员确认放行` });
+      },
+
+      removeBlacklist: (id) => {
+        const entry = get().blacklist.find((b) => b.id === id);
+        if (!entry) return;
+        const member = get().members.find((m) => m.id === entry.member_id);
+        set((st) => ({ blacklist: st.blacklist.filter((b) => b.id !== id) }));
+        get().pushToast({ type: "success", title: "已移出黑名单", desc: `${member?.name ?? entry.member_id} 恢复正常预约` });
+      },
+
       resetData: () => {
         set({ ...seedData, toasts: [] });
         get().pushToast({ type: "info", title: "演示数据已重置" });
@@ -273,6 +311,7 @@ export const useStore = create<State & Actions>()(
         attendance: s.attendance,
         bills: s.bills,
         accessLogs: s.accessLogs,
+        blacklist: s.blacklist,
       }),
     },
   ),

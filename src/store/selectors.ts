@@ -7,6 +7,7 @@ import type {
   AccessToken,
   Attendance,
   AccessLog,
+  BlacklistEntry,
 } from "@/data/types";
 import { durationMins } from "@/utils/format";
 
@@ -25,6 +26,10 @@ export function spaceArea(spaces: Space[], areas: Area[], spaceId: string): Spac
 
 export function memberById(members: Member[], id: string): Member | undefined {
   return members.find((m) => m.id === id);
+}
+
+export function blacklistOfMember(blacklist: BlacklistEntry[], memberId: string): BlacklistEntry | undefined {
+  return blacklist.find((b) => b.member_id === memberId);
 }
 
 export function tokenOfReservation(tokens: AccessToken[], reservationId: string): AccessToken | undefined {

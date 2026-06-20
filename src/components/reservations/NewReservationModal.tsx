@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { Check, ChevronLeft, ChevronRight, KeyRound, ShieldCheck } from "lucide-react";
-import type { Plan, PayMethod } from "@/data/types";
+import { Check, ChevronLeft, ChevronRight, KeyRound, ShieldCheck, ShieldAlert, AlertTriangle } from "lucide-react";
+import type { Plan, PayMethod, BlacklistEntry } from "@/data/types";
 import { PLAN_LABEL, PAY_METHOD_LABEL, SPACE_STATUS_LABEL } from "@/data/types";
 import { useStore } from "@/store/useStore";
 import { estimateAmount } from "@/utils/price";
 import { yuan, fmtDateTime, pad2 } from "@/utils/format";
 import { Modal } from "@/components/ui/Modal";
-import { PlanBadge } from "@/components/ui/StatusBadge";
+import { PlanBadge, BlacklistReasonBadge } from "@/components/ui/StatusBadge";
 import { cn } from "@/lib/utils";
 
 const plans: { key: Plan; desc: string }[] = [
@@ -19,14 +19,16 @@ const plans: { key: Plan; desc: string }[] = [
 const empty = { areaId: "", spaceId: "", plan: "" as Plan | "", memberId: "", date: "", start: "", end: "", method: "balance" as PayMethod };
 
 export function NewReservationModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { areas, spaces, members, createReservation, pushToast } = useStore();
+  const { areas, spaces, members, blacklist, createReservation, pushToast } = useStore();
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({ ...empty });
+  const [blockConfirm, setBlockConfirm] = useState<BlacklistEntry | null>(null);
 
   if (!open) return null;
   const area = areas.find((a) => a.id === form.areaId);
   const space = spaces.find((s) => s.id === form.spaceId);
   const member = members.find((m) => m.id === form.memberId);
+  const memberBlock = blacklist.find((b) => b.member_id === form.memberId);
   const startIso = form.date && form.start ? new Date(`${form.date}T${form.start}:00`).toISOString() : "";
   const endIso = form.date && form.end ? new Date(`${form.date}T${form.end}:00`).toISOString() : "";
   const amount = area && form.plan ? estimateAmount(form.plan as Plan, area, startIso || new Date().toISOString(), endIso || new Date().toISOString()) : 0;
@@ -59,6 +61,29 @@ export function NewReservationModal({ open, onClose }: { open: boolean; onClose:
     });
     if (res.ok) {
       close();
+    } else if (res.blocked && res.blacklist) {
+      setBlockConfirm(res.blacklist);
+    } else {
+      pushToast({ type: "error", title: "预约失败", desc: res.error });
+    }
+  };
+
+  const forceConfirm = () => {
+    if (!area || !space || !form.plan || !member) return;
+    const res = createReservation(
+      {
+        member_id: form.memberId,
+        space_id: form.spaceId,
+        plan: form.plan as Plan,
+        start: startIso,
+        end: endIso,
+        method: form.method,
+      },
+      { force: true },
+    );
+    setBlockConfirm(null);
+    if (res.ok) {
+      close();
     } else {
       pushToast({ type: "error", title: "预约失败", desc: res.error });
     }
@@ -67,6 +92,7 @@ export function NewReservationModal({ open, onClose }: { open: boolean; onClose:
   const stepTitles = ["选择区域与资源", "选择套餐", "填写详情", "确认并下发门禁"];
 
   return (
+    <>
     <Modal
       open={open}
       onClose={close}
@@ -146,11 +172,27 @@ export function NewReservationModal({ open, onClose }: { open: boolean; onClose:
             <label className="label-eyebrow">会员</label>
             <select value={form.memberId} onChange={(e) => setForm({ ...form, memberId: e.target.value })} className="input mt-1.5">
               <option value="">请选择会员</option>
-              {members.map((m) => (
-                <option key={m.id} value={m.id}>{m.name} · {m.phone}（余额 {yuan(m.balance)}）</option>
-              ))}
+              {members.map((m) => {
+                const blocked = blacklist.some((b) => b.member_id === m.id);
+                return (
+                  <option key={m.id} value={m.id}>{m.name} · {m.phone}（余额 {yuan(m.balance)}）{blocked ? " · ⚠ 黑名单" : ""}</option>
+                );
+              })}
             </select>
           </div>
+          {memberBlock && (
+            <div className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50/60 p-3.5">
+              <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
+              <div className="text-sm">
+                <p className="font-semibold text-rose-700">该会员已被标记黑名单</p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  <BlacklistReasonBadge reason={memberBlock.reason} />
+                  <span className="text-xs text-ink-soft">{memberBlock.note}</span>
+                </div>
+                <p className="mt-1.5 text-xs text-ink-muted">提交预约时将弹窗提示管理员确认是否放行</p>
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
               <label className="label-eyebrow">日期</label>
@@ -180,6 +222,13 @@ export function NewReservationModal({ open, onClose }: { open: boolean; onClose:
 
       {step === 4 && area && space && (
         <div className="space-y-4">
+          {memberBlock && (
+            <div className="flex items-center gap-2.5 rounded-xl border border-rose-200 bg-rose-50/60 px-4 py-3">
+              <ShieldAlert className="h-4 w-4 shrink-0 text-rose-600" />
+              <p className="text-sm text-rose-700"><span className="font-semibold">{member?.name}</span> 为黑名单会员，确认预约后将弹窗二次确认是否放行</p>
+              <BlacklistReasonBadge reason={memberBlock.reason} />
+            </div>
+          )}
           <div className="rounded-xl border border-line-soft bg-surface-sunken p-4">
             <div className="grid grid-cols-2 gap-y-3 text-sm">
               <div><p className="label-eyebrow">区域</p><p className="mt-0.5 text-ink">{area.name}</p></div>
@@ -207,5 +256,45 @@ export function NewReservationModal({ open, onClose }: { open: boolean; onClose:
         </div>
       )}
     </Modal>
+
+    {blockConfirm && member && (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-ink/40 backdrop-blur-[2px]" onClick={() => setBlockConfirm(null)} />
+        <div className="relative w-full max-w-md animate-scale-in rounded-2xl border border-rose-200 bg-surface shadow-lift">
+          <div className="flex items-start gap-3 border-b border-rose-100 px-6 py-5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-rose-100 text-rose-600">
+              <ShieldAlert className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-lg text-ink">黑名单会员预约拦截</h3>
+              <p className="mt-0.5 text-sm text-ink-soft">该会员已被标记黑名单，请确认是否放行本次预约</p>
+            </div>
+          </div>
+          <div className="space-y-3 px-6 py-5">
+            <div className="rounded-xl border border-line-soft bg-surface-sunken p-4">
+              <div className="flex items-center justify-between">
+                <p className="font-display text-base text-ink">{member.name}</p>
+                <BlacklistReasonBadge reason={blockConfirm.reason} />
+              </div>
+              <p className="mt-1 font-mono text-[11px] text-ink-muted">{member.phone} · {member.id}</p>
+            </div>
+            <div>
+              <p className="label-eyebrow">情况说明</p>
+              <p className="mt-1 text-sm text-ink-soft">{blockConfirm.note || "无"}</p>
+              <p className="mt-2 text-[11px] text-ink-muted">标记时间 · {fmtDateTime(blockConfirm.created_at)}</p>
+            </div>
+            <div className="flex items-start gap-2 rounded-lg border border-rose-100 bg-rose-50/60 p-3">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" />
+              <p className="text-xs leading-relaxed text-rose-700">确认放行后该会员可正常完成预约并下发门禁权限；拒绝则中止本次预约。如需解除标记，请前往「黑名单管理」处理。</p>
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-3 border-t border-line-soft px-6 py-4">
+            <button onClick={() => setBlockConfirm(null)} className="btn-secondary">拒绝放行</button>
+            <button onClick={forceConfirm} className="btn-primary"><ShieldCheck className="h-4 w-4" /> 确认放行</button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
